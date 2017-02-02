@@ -1,42 +1,55 @@
 {
-    "name": "visionr-integrate",
-    "displayName": "visionr-integrate",
+	"name": "visionr-integrate",
+	"displayName": "visionr-integrate",
 	"keywords": [
 		"integration",
 		"visionr"
 	],
-    "description": "VisionR server admin console VSCode integration",
-    "version": "0.1.0",
-    "publisher": "plan-vision",
-    "engines": {
-        "vscode": "^1.5.0"
-    },
-    "categories": [
-        "Other"
-    ],
-    "activationEvents": [
-        "onCommand:visionr.uploadObject",
-        "onCommand:visionr.reloadCore"
-    ],
-    "main": "./extension",
-    "contributes": {
-        "commands": [{
-            "command": "visionr.uploadObject",
-            "title": "VisionR: Upload Object/ODEF (+reload core)"
-        },{
-            "command": "visionr.reloadCore",
-            "title": "VisionR: Reload CORE"
-        }]
-    },
-    "scripts": {
-        "postinstall": "node ./node_modules/vscode/bin/install"
-    },
-    "devDependencies": {
-        "typescript": "^2.0.3",
-        "vscode": "^1.0.0",
-        "mocha": "^2.3.3",
-        "eslint": "^3.6.0",
-        "@types/node": "^6.0.40",
-        "@types/mocha": "^2.2.32"
-    }
+	"description": "VisionR server admin console VSCode integration",
+	"version": "0.1.0",
+	"publisher": "plan-vision",
+	"engines": {
+		"vscode": "^1.5.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onCommand:visionr.uploadProperty",
+		"onCommand:visionr.uploadObject",
+		"onCommand:visionr.reloadCore"
+	],
+	"main": "./extension",
+	"contributes": {
+		"keybindings": [{
+			"command": "visionr.uploadObject",
+			"key": "ctrl+alt+v O",
+			"mac": "cmd+alt+v O"
+		}, {
+			"command": "visionr.uploadProperty",
+			"key": "ctrl+alt+v p",
+			"mac": "cmd+alt+v p"
+		}],
+		"commands": [{
+			"command": "visionr.uploadObject",
+			"title": "VisionR: Upload Object/ODEF (+reload core)"
+		}, {
+			"command": "visionr.reloadCore",
+			"title": "VisionR: Reload CORE"
+		}, {
+			"command": "visionr.uploadProperty",
+			"title": "VisionR: Upload Property"
+		}]
+	},
+	"scripts": {
+		"postinstall": "node ./node_modules/vscode/bin/install"
+	},
+	"devDependencies": {
+		"typescript": "^2.0.3",
+		"vscode": "^1.0.0",
+		"mocha": "^2.3.3",
+		"eslint": "^3.6.0",
+		"@types/node": "^6.0.40",
+		"@types/mocha": "^2.2.32"
+	}
 }
