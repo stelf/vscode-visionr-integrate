@@ -6,7 +6,7 @@
 		"visionr"
 	],
 	"description": "VisionR server admin console VSCode integration",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"publisher": "plan-vision",
 	"engines": {
 		"vscode": "^1.5.0"
