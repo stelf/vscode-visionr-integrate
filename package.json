@@ -5,7 +5,7 @@
 		"integration",
 		"visionr"
 	],
-	"description": "VisionR server admin console VSCode integration",
+	"description": "VisionR devops integration",
 	"version": "0.2.0",
 	"publisher": "plan-vision",
 	"engines": {
@@ -39,7 +39,28 @@
 		}, {
 			"command": "visionr.uploadProperty",
 			"title": "VisionR: Upload Property"
-		}]
+		}],
+		"configuration": {
+			"type": "object",
+			"title": "VisionR config",
+			"properties": {
+				"visionr.vshpath": {
+					"type": "string",
+					"default": "vsh"
+				},
+				"visionr.endpoints": {
+					"type": "array",
+					"default": [{
+						"name": "local 8182",
+						"endpoint": "http://localhost:8182",
+						"username": "visionr",
+						"password": "change-with-real-one",
+						"servkey": "UPDATE"
+					}],
+					"description": "Endpoints Config."
+				}
+			}
+		}
 	},
 	"scripts": {
 		"postinstall": "node ./node_modules/vscode/bin/install"

@@ -6,16 +6,9 @@
 const vscode = require('vscode')
 const spawn = require('child_process').spawn
 
-const config = {
-  visionr: {
-    vshpath: 'vsh',
-    username: 'admin',
-    password: 'plan4vision',
-    servkey: 'UPDATE'
-  }
-}
+const vshpath =  vscode.workspace.getConfiguration('visionr').get('vshpath');
 
-function waitExec (vsh, command) {
+function waitExec(vsh, command) {
   return new Promise((res, rej) => {
     console.log('waitExec: bind to subprocess events and expect.')
     let cmdsent = false
@@ -23,6 +16,12 @@ function waitExec (vsh, command) {
     vsh.stdout.on('data', vshdata => {
       console.log(`waitExec: ${vshdata}`)
       let vshline = vshdata.toString()
+
+      if (vshline.indexOf('Server stopped') + 1) {
+        vscode.window.showErrorMessage(vshline)
+        console.error(`waitExec: ${vshline}`)
+        return rej(vshline)
+      }
 
       if (vshline.indexOf('Authentification error') + 1) {
         vscode.window.showErrorMessage(vshline)
@@ -60,13 +59,22 @@ function waitExec (vsh, command) {
   })
 }
 
-function sendXMLOBJ (xmldata) {
+function chooseEndpoint() {
+  let endpoints = vscode.workspace.getConfiguration('visionr').get('endpoints');
+
+  if (endpoints.length > 1) {
+    //TODO: dropdown
+  } else 
+    return endpoints[0];
+}
+
+function sendXMLOBJ(xmldata) {
   return new Promise((res, rej) => {
-    let vsh = spawn(config.visionr.vshpath, ['localhost:8182',
+    let ep = chooseEndpoint();
+    let vsh = spawn(vshpath, [ep.endpoint,
       '-t', 'xmlobject',
-      '-u', config.visionr.username,
-      '-p', config.visionr.password,
-      '-k', config.visionr.servkey])
+      '-u', ep.username, '-p', ep.password, '-k', ep.servkey
+    ])
 
     vscode.window.setStatusBarMessage('sendReloadCore: sending XML object')
     vsh.on('data', data => console.log(data));
@@ -77,17 +85,17 @@ function sendXMLOBJ (xmldata) {
         vscode.window.showInformationMessage('XML Object sent.')
         res('XML object sent!')
       })
-      .catch((e) => rej(e))
+      .catch((e) => (console.log(e)) || Promise.resolve(true));
   })
 }
 
-function sendSCHEMA (sxml) {
+function sendSCHEMA(sxml) {
   return new Promise((res, rej) => {
-    let vsh = spawn(config.visionr.vshpath, ['localhost:8182',
+    let ep = chooseEndpoint();
+    let vsh = spawn(vshpath, [ep.endpoint,
       '-t', 'xml',
-      '-u', config.visionr.username,
-      '-p', config.visionr.password,
-      '-k', config.visionr.servkey])
+      '-u', ep.username, '-p', ep.password, '-k', ep.servkey
+    ])
 
     vscode.window.setStatusBarMessage('sendReloadCore: sending SCHEMA')
 
@@ -101,13 +109,13 @@ function sendSCHEMA (sxml) {
   })
 }
 
-function sendReloadCore () {
+function sendReloadCore() {
   return new Promise((res, rej) => {
-    let vsh = spawn('vsh', ['localhost:8182',
+    let ep = chooseEndpoint();
+    let vsh = spawn(vshpath, [ep.endpoint,
       '-t', 'raw',
-      '-u', config.visionr.username,
-      '-p', config.visionr.password,
-      '-k', config.visionr.servkey])
+      '-u', ep.username, '-p', ep.password, '-k', ep.servkey
+    ])
 
     vscode.window.setStatusBarMessage('sendReloadCore: reloading core')
 
@@ -121,64 +129,134 @@ function sendReloadCore () {
   })
 }
 
-function uploadProperty () {
+function uploadProperty() {
   let r, t
   const editor = vscode.window.activeTextEditor
-  t = editor.selection.active.line
-  let tfnd = false, rfnd = false
   let lcnt = vscode.window.activeTextEditor.document.lineCount
-  let buf
   let tags = []
 
-  // figure the objectdef name
+  r = t = editor.selection.active.line
+
+  // core properties  
+  const cprop = [
+    'is_obligatory',
+    'is_multiple',
+    'sort_id',
+    'category',
+    'data_source',
+    'relation_parent',
+    'is_inmaintbl',
+    'relation_filter'
+  ];
+
+  // 1) figure property content
+  let level = false;
+  let propname;
+
   do {
-    buf = editor.document.lineAt(t).text
-    let tag
+    let buf = editor.document.lineAt(t).text;
+    let tag;
 
-    if (tag = buf.match(/\<(\w)+.*?(col)*.*?\>/)) {
-      tags.unshift({tag: tag[0], line: t})
-    }
-
-    if (tag = buf.match(/\<(\w)+.*?(tbl|copy_from)*.*?\>/)) {
-      tags.unshift({tag: tag[0], line: t})
-      tfnd = true
-    }
-
-    t--
-  } while (!tfnd && t > 0)
-
-  // figure only the currently selected property
-  if (tfnd) {
-    r = tags[1].line
-    let res = []
-
-    do {
-      buf = editor.document.lineAt(r).text
-      res.push(buf)
-      if (buf == `<${tags[1].tag}/>`) {
-        rfnd = true
+    if (tag = buf.match(/<([\w_]+)>.*<\/\1>/)) {
+      if (cprop.indexOf(tag[1]) >= 0) {
+        level = true;
       }
-    } while (!rfnd && ++r < lcnt)
-
-    if (rfnd) {
-      buf = editor.document.lineAt(tags[1].line).text
-      res.unshift(buf)
-      res.push(`<${tags[1].tag}/>`)
-
-      sendXMLOBJ(res.join('\n')).then(sendReloadCore).then(
-        vscode.window.showInformationMessage.bind(this, 'Upload to VISIONR Server complete!'))
+    } else if (tag = buf.match(/^\s*<([\w_]+)>\s*$/)) {
+      if (level) {
+        propname = tag[1];
+        console.log(`uploadProperty: found <${propname}> property start, at line ${t}`);
+      }
+    } else {
+      level = false;
     }
-  }
+
+    tags.unshift({
+      text: buf,
+      line: t
+    });
+    t--;
+  } while (!propname && t > 0);
+
+  if (!propname) return;
+
+  // 2) figure the objectdef opening tag
+  let objectdef;
+  let o = t;
+  do {
+    let tag, buf;
+    buf = editor.document.lineAt(o).text
+
+    if (tag = buf.match(/\<(\w+)\s*\b(tbl|copy_from)+.*\>/)) {
+      tags.unshift({
+        text: buf,
+        line: o
+      })
+      objectdef = tag[1];
+      console.log(`uploadProperty: objectdef is [ ${objectdef} ] located at line ${o}`);
+    }
+
+    o--
+  } while (!objectdef && o > 0)
+
+  if (!objectdef) return;
+
+  // 3)  figure the end of current property
+  // note: counting depth as some property
+  // names such as <name> may also appear as tags
+  let depth = 1;
+  console.log(`uploadProperty: searching for the <${propname}> contents, starting at line ${r}`);
+  do {
+    let buf = editor.document.lineAt(r).text
+    tags.push({
+      text: buf,
+      line: r
+    });
+
+    if (buf.indexOf(`<${propname}>`) >= 0) depth++;
+    if (buf.indexOf(`</${propname}`) >= 0) --depth;
+
+    r++;
+  } while (depth && r < lcnt)
+
+  if (depth) return;
+
+  // 4) Prologue
+  let i = 0;
+  let module;
+  do {
+    let buf = editor.document.lineAt(i).text
+    let test
+    if (test = buf.match(/<(\w+) module_alias.*>/)) {
+      module = test[1];
+      tags.unshift({
+        text: buf,
+        line: i
+      });
+    }
+
+    i++;
+  } while (!module);
+
+  editor.selection.start.line = t;
+  editor.selection.start.character = 1;
+  editor.selection.end.line = r + 1;
+  editor.selection.end.character = 1;
+
+  let payload = tags.map(e => e.text).join('\n')
+
+  sendSCHEMA(payload).then(sendReloadCore).then(
+    vscode.window.showInformationMessage.bind(this, 'Upload to VISIONR Server complete!'))
 }
 
-function uploadObject () {
+function uploadObject() {
   let r, l
   const editor = vscode.window.activeTextEditor
   l = r = editor.selection.active.line
-  let lfnd = false, rfnd = false
+  let lfnd = false,
+    rfnd = false
   let lcnt = vscode.window.activeTextEditor.document.lineCount
   let buf
-  let res = [ editor.document.lineAt(editor.selection.active.line).text ]
+  let res = [editor.document.lineAt(editor.selection.active.line).text]
 
   // find boundaries of object looking for opening/closing tags
   do {
@@ -201,7 +279,7 @@ function uploadObject () {
       if (!rfnd) res.push(editor.document.lineAt(r).text)
       if (!lfnd) res.unshift(editor.document.lineAt(l).text)
     }
-  } while (l >= 0 && r < lcnt && ! (lfnd && rfnd))
+  } while (l >= 0 && r < lcnt && !(lfnd && rfnd))
 
   if (lfnd && rfnd) {
     vscode.window.setStatusBarMessage(`found ${rfnd - lfnd} data between ${rfnd} and ${lfnd}`)
@@ -213,7 +291,7 @@ function uploadObject () {
   }
 }
 
-function activate (context) {
+function activate(context) {
   console.log('VISIONR integration started!')
 
   const cmds = {
@@ -231,7 +309,7 @@ function activate (context) {
 
 exports.activate = activate
 
-function deactivate () {
+function deactivate() {
   console.log('unload VISIONR extension')
 }
 exports.deactivate = deactivate
