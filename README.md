@@ -1,6 +1,6 @@
 # visionr-integrate README
 
-This is the README for your extension "visionr-integrate". After writing up a brief description, we recommend including the following sections.
+This extension simplifies the dev. interaction with the visionr server when dealing with schema / objects updates directly live to the sever. 
 
 ## Features
 
@@ -9,8 +9,6 @@ The extension currently supports the following commands :
 * uploadObject (ctrl-alt-v o)
 * uploadProperty (ctrl-alt-v p)
 * reloadCore (ctrl-alt-v r)
-
-\!\[feature X\]\(images/feature-x.png\)
 
 > this doco is a work in progress
 

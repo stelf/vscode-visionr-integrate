@@ -19,9 +19,19 @@ function waitExec(vsh, command) {
 
       if (vshline.indexOf('Server stopped') + 1) {
         vscode.window.showErrorMessage(vshline)
+        
         console.error(`waitExec: ${vshline}`)
         return rej(vshline)
       }
+
+      if (vshline.indexOf('Unable to transform simple import file') + 1) {
+        vscode.window.showErrorMessage('Error transforming snippet.')
+        console.error(`waitExec: ${vshline}`)
+        console.info(command)
+        return rej(vshline)
+      }
+
+
 
       if (vshline.indexOf('Authentification error') + 1) {
         vscode.window.showErrorMessage(vshline)
