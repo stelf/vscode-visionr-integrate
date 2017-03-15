@@ -84,7 +84,7 @@ function sendXMLOBJ(xmldata) {
       ])
 
       vscode.window.setStatusBarMessage(`sendReloadCore: sending XML object to ${ep.endpoint}`)
-      vsh.on('data', data => console.log(data));
+      // vsh.on('data', data => console.log(data));
 
       waitExec(vsh, xmldata)
         .then(() => {

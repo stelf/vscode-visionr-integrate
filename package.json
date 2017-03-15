@@ -52,12 +52,12 @@
 					"type": "array",
 					"default": [{
 						"name": "local 8182",
-						"endpoint": "http://localhost:8182",
+						"endpoint": "localhost:8182",
 						"username": "visionr",
 						"password": "change-with-real-one",
 						"servkey": "UPDATE"
 					}],
-					"description": "Endpoints Config."
+					"description": "Endpoints Config. Note - do not include HTTP in address"
 				}
 			}
 		}
