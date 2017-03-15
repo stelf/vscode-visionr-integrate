@@ -6,7 +6,7 @@
 const vscode = require('vscode')
 const spawn = require('child_process').spawn
 
-const vshpath =  vscode.workspace.getConfiguration('visionr').get('vshpath');
+const vshpath = vscode.workspace.getConfiguration('visionr').get('vshpath');
 
 function waitExec(vsh, command) {
   return new Promise((res, rej) => {
@@ -16,10 +16,11 @@ function waitExec(vsh, command) {
     vsh.stdout.on('data', vshdata => {
       console.log(`waitExec: ${vshdata}`)
       let vshline = vshdata.toString()
+      let e;
 
       if (vshline.indexOf('Server stopped') + 1) {
         vscode.window.showErrorMessage(vshline)
-        
+
         console.error(`waitExec: ${vshline}`)
         return rej(vshline)
       }
@@ -31,24 +32,10 @@ function waitExec(vsh, command) {
         return rej(vshline)
       }
 
-
-
-      if (vshline.indexOf('Authentification error') + 1) {
+      if (e = vshline.match(/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|Authentification/)) {
         vscode.window.showErrorMessage(vshline)
         console.error(`waitExec: ${vshline}`)
-        return rej(vshline)
-      }
-
-      if (vshline.indexOf('ECONNREFUSED') + 1) {
-        vscode.window.showErrorMessage(vshline)
-        console.error(`waitExec: ${vshline}`)
-        return rej(vshline)
-      }
-
-      if (vshline.indexOf('EAI_AGAIN') + 1) {
-        vscode.window.showErrorMessage(vshline)
-        console.error(`waitExec: ${vshline}`)
-        return rej(vshline)
+        return rej(`Connection error:  ${e[0]}`)
       }
 
       if (vshline.indexOf('Starting log stream') + 1) {
@@ -61,82 +48,96 @@ function waitExec(vsh, command) {
 
     vsh.on('close', code => {
       console.log(`waitExec: vsh child process exited with code ${code}`)
-      if (code > 0) rej(code)
-      if (!cmdsent) rej('command did not went through!')
+      if (code > 0) return rej(code)
+      if (!cmdsent) return rej('command did not went through!')
 
       res('vsh closed successfully, command went through!')
     })
   })
 }
 
+let curep;
+
 function chooseEndpoint() {
   let endpoints = vscode.workspace.getConfiguration('visionr').get('endpoints');
 
-  if (endpoints.length > 1) {
-    //TODO: dropdown
-  } else 
-    return endpoints[0];
+  if (endpoints.length == 1) {
+    return Promise.resolve(endpoints[0]);
+  }
+
+  if (curep) return Promise.resolve(curep);
+
+  return new Promise(res =>
+    vscode.window.showQuickPick(endpoints.map(e => e.name))
+    .then(choosen => {
+      curep = endpoints.find(e => e.name == choosen);
+      res(curep);
+    }));
 }
 
 function sendXMLOBJ(xmldata) {
   return new Promise((res, rej) => {
-    let ep = chooseEndpoint();
-    let vsh = spawn(vshpath, [ep.endpoint,
-      '-t', 'xmlobject',
-      '-u', ep.username, '-p', ep.password, '-k', ep.servkey
-    ])
+    chooseEndpoint().then(ep => {
+      let vsh = spawn(vshpath, [ep.endpoint,
+        '-t', 'xmlobject',
+        '-u', ep.username, '-p', ep.password, '-k', ep.servkey
+      ])
 
-    vscode.window.setStatusBarMessage('sendReloadCore: sending XML object')
-    vsh.on('data', data => console.log(data));
+      vscode.window.setStatusBarMessage(`sendReloadCore: sending XML object to ${ep.endpoint}`)
+      vsh.on('data', data => console.log(data));
 
-    waitExec(vsh, xmldata)
-      .then(() => {
-        vscode.window.setStatusBarMessage('sendXMLOBJ: data sent')
-        vscode.window.showInformationMessage('XML Object sent.')
-        res('XML object sent!')
-      })
-      .catch((e) => (console.log(e)) || Promise.resolve(true));
-  })
+      waitExec(vsh, xmldata)
+        .then(() => {
+          vscode.window.setStatusBarMessage(`sendXMLOBJ: data sent to ${ep.endpoint}`)
+          vscode.window.showInformationMessage(`XML Object sent to ${ep.endpoint}`)
+          res('XML object sent!')
+        })
+        .catch((e) => { console.log(e); return rej(e); });
+    })
+  });
 }
 
 function sendSCHEMA(sxml) {
   return new Promise((res, rej) => {
-    let ep = chooseEndpoint();
-    let vsh = spawn(vshpath, [ep.endpoint,
-      '-t', 'xml',
-      '-u', ep.username, '-p', ep.password, '-k', ep.servkey
-    ])
+    chooseEndpoint().then(ep => {
+      let vsh = spawn(vshpath, [ep.endpoint,
+        '-t', 'xml',
+        '-u', ep.username, '-p', ep.password, '-k', ep.servkey
+      ])
 
-    vscode.window.setStatusBarMessage('sendReloadCore: sending SCHEMA')
+      vscode.window.setStatusBarMessage('sendReloadCore: sending SCHEMA')
 
-    waitExec(vsh, sxml)
-      .then(() => {
-        vscode.window.setStatusBarMessage('sendSCHEMA: data sent')
-        vscode.window.showInformationMessage('XML SCHEMA sent.')
-        res('VR XML Schema sent!')
-      })
-      .catch(e => rej(e))
+      waitExec(vsh, sxml)
+        .then(() => {
+          vscode.window.setStatusBarMessage('sendSCHEMA: data sent')
+          vscode.window.showInformationMessage('XML SCHEMA sent.')
+          res('VR XML Schema sent!')
+        })
+        .catch((e) => { console.log(e); return rej(e); });
+    })
   })
+
 }
 
 function sendReloadCore() {
   return new Promise((res, rej) => {
-    let ep = chooseEndpoint();
-    let vsh = spawn(vshpath, [ep.endpoint,
-      '-t', 'raw',
-      '-u', ep.username, '-p', ep.password, '-k', ep.servkey
-    ])
+    chooseEndpoint().then(ep => {
+      let vsh = spawn(vshpath, [ep.endpoint,
+        '-t', 'raw',
+        '-u', ep.username, '-p', ep.password, '-k', ep.servkey
+      ])
 
-    vscode.window.setStatusBarMessage('sendReloadCore: reloading core')
+      vscode.window.setStatusBarMessage('sendReloadCore: reloading core')
 
-    waitExec(vsh, 'reload -m core')
-      .then(() => {
-        vscode.window.setStatusBarMessage('reloadCore: reload command sent')
-        vscode.window.showInformationMessage('Reload triggered.')
-        res('VR core reload triggered');
-      })
-      .catch(e => rej(e))
-  })
+      waitExec(vsh, 'reload -m core')
+        .then(() => {
+          vscode.window.setStatusBarMessage('reloadCore: reload command sent')
+          vscode.window.showInformationMessage('Reload triggered.')
+          res('VR core reload triggered');
+        })
+        .catch((e) => { console.log(e); rej(e); });
+    })
+  });
 }
 
 function uploadProperty() {
@@ -296,6 +297,7 @@ function uploadObject() {
     sendXMLOBJ(res.join('\n'))
       .then(sendReloadCore)
       .then(vscode.window.showInformationMessage.bind(this, 'Upload to VISIONR Server complete!'))
+      .catch(vscode.window.showErrorMessage.bind(this))
   } else {
     console.log('could not figure XML object within current VR editor')
   }
