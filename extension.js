@@ -75,6 +75,11 @@ function chooseEndpoint() {
     }));
 }
 
+function selectEndpoint() {
+  curep = undefined;
+  return chooseEndpoint();
+}
+
 function sendXMLOBJ(xmldata) {
   return new Promise((res, rej) => {
     chooseEndpoint().then(ep => {
@@ -248,6 +253,13 @@ function uploadProperty() {
     i++;
   } while (!module);
 
+  // 5) Epilogue
+
+  tags.push(
+    { text: `</${propname}>` },
+    { text: `</${module}>` }
+  );
+
   editor.selection.start.line = t;
   editor.selection.start.character = 1;
   editor.selection.end.line = r + 1;
@@ -309,7 +321,8 @@ function activate(context) {
   const cmds = {
     'visionr.uploadObject': uploadObject,
     'visionr.reloadCore': sendReloadCore,
-    'visionr.uploadProperty': uploadProperty
+    'visionr.uploadProperty': uploadProperty,
+    'visionr.selectEndpoint': selectEndpoint
   }
 
   for (var code in cmds) {
