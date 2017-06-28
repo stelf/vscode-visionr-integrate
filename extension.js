@@ -44,6 +44,14 @@ function waitExec(vsh, command) {
         vsh.stdin.end()
         cmdsent = true
       }
+
+      if (e = vshline.indexOf('XML import error on line') >= 0) {
+        return rej('error importing xml snippet...');
+      }
+
+      if (e = vshline.indexOf('On validating import xml file') >= 0) {
+        return rej('error importing xml snippet...');
+      }
     })
 
     vsh.on('close', code => {
@@ -93,11 +101,11 @@ function sendXMLOBJ(xmldata) {
 
       waitExec(vsh, xmldata)
         .then(() => {
-          vscode.window.setStatusBarMessage(`sendXMLOBJ: data sent to ${ep.endpoint}`)
-          vscode.window.showInformationMessage(`XML Object sent to ${ep.endpoint}`)
+          vscode.window.setStatusBarMessage(`sendXMLOBJ: data => ${ep.endpoint} (${ep.servkey})`)
+  //          vscode.window.showInformationMessage(`XML Object sent to ${ep.endpoint}`)
           res('XML object sent!')
         })
-        .catch((e) => { console.log(e); return rej(e); });
+        .catch(vscode.window.showErrorMessage.bind(this));
     })
   });
 }
@@ -112,13 +120,12 @@ function sendSCHEMA(sxml) {
 
       vscode.window.setStatusBarMessage('sendReloadCore: sending SCHEMA')
 
-      waitExec(vsh, sxml)
+      return waitExec(vsh, sxml)
         .then(() => {
-          vscode.window.setStatusBarMessage('sendSCHEMA: data sent')
-          vscode.window.showInformationMessage('XML SCHEMA sent.')
+          vscode.window.showInformationMessage('XML SCHEMA update sent.', ep.servkey)
           res('VR XML Schema sent!')
         })
-        .catch((e) => { console.log(e); return rej(e); });
+        .catch(vscode.window.showErrorMessage.bind(this));
     })
   })
 
@@ -155,14 +162,17 @@ function uploadProperty() {
 
   // core properties  
   const cprop = [
-    'is_obligatory',
-    'is_multiple',
-    'sort_id',
     'category',
     'data_source',
-    'relation_parent',
+    'data_type',
+    'index_code',
     'is_inmaintbl',
-    'relation_filter'
+    'is_multiple',
+    'is_obligatory',
+    'relation_filter',
+    'relation_parent',
+    'related_objectdef',
+    'sort_id',
   ];
 
   // 1) figure property content
@@ -173,11 +183,13 @@ function uploadProperty() {
     let buf = editor.document.lineAt(t).text;
     let tag;
 
+    if (tag = buf.match(/<(\/[\w_]+)>/)) level = false;
+        
     if (tag = buf.match(/<([\w_]+)>.*<\/\1>/)) {
       if (cprop.indexOf(tag[1]) >= 0) {
         level = true;
       }
-    } else if (tag = buf.match(/^\s*<([\w_]+)>\s*$/)) {
+    } else if (tag = buf.match(/^\s*<([\w_]+).*?(col=".*?")*>\s*$/)) {
       if (level) {
         propname = tag[1];
         console.log(`uploadProperty: found <${propname}> property start, at line ${t}`);
@@ -202,7 +214,7 @@ function uploadProperty() {
     let tag, buf;
     buf = editor.document.lineAt(o).text
 
-    if (tag = buf.match(/\<(\w+)\s*\b(tbl|copy_from)+.*\>/)) {
+    if (tag = buf.match(/\<([\w_]+)\s*\b(tbl|copy_from)+.*\>/)) {
       tags.unshift({
         text: buf,
         line: o
@@ -219,7 +231,7 @@ function uploadProperty() {
   // 3)  figure the end of current property
   // note: counting depth as some property
   // names such as <name> may also appear as tags
-  let depth = 1;
+  let depth = 1; r++;
   console.log(`uploadProperty: searching for the <${propname}> contents, starting at line ${r}`);
   do {
     let buf = editor.document.lineAt(r).text
@@ -256,7 +268,7 @@ function uploadProperty() {
   // 5) Epilogue
 
   tags.push(
-    { text: `</${propname}>` },
+    { text: `</${objectdef}>` },
     { text: `</${module}>` }
   );
 
@@ -265,7 +277,7 @@ function uploadProperty() {
   editor.selection.end.line = r + 1;
   editor.selection.end.character = 1;
 
-  let payload = tags.map(e => e.text).join('\n')
+  let payload = "<objectdefs>" + tags.map(e => e.text).join('\n') + "</objectdefs>";
 
   sendSCHEMA(payload).then(sendReloadCore).then(
     vscode.window.showInformationMessage.bind(this, 'Upload to VISIONR Server complete!'))
@@ -285,14 +297,14 @@ function uploadObject() {
   do {
     if (!rfnd) {
       buf = editor.document.lineAt(r).text
-      if (buf.indexOf('</object') + 1) {
+      if (buf.indexOf('</object') >= 0 && buf.indexOf('<object>') == -1) {
         rfnd = true
       } else if (r < lcnt) r++
     }
 
     if (!lfnd) {
       buf = editor.document.lineAt(l).text
-      if (buf.indexOf('<object') + 1) {
+      if (buf.indexOf('<object') >= 0 && buf.indexOf('/>') == -1 && buf.indexOf('/object>') == -1) {
         lfnd = true
       } else if (l > 0) l--
     }
@@ -305,7 +317,7 @@ function uploadObject() {
   } while (l >= 0 && r < lcnt && !(lfnd && rfnd))
 
   if (lfnd && rfnd) {
-    vscode.window.setStatusBarMessage(`found ${rfnd - lfnd} data between ${rfnd} and ${lfnd}`)
+    vscode.window.setStatusBarMessage(`found ${r - l} lines long object between rows ${r} and ${l}`)
     sendXMLOBJ(res.join('\n'))
       .then(sendReloadCore)
       .then(vscode.window.showInformationMessage.bind(this, 'Upload to VISIONR Server complete!'))
@@ -330,6 +342,37 @@ function activate(context) {
     let cmd = vscode.commands.registerCommand(code, cmds[code])
     context.subscriptions.push(cmd)
   }
+
+//   var s1 = vscode.languages.registerCodeLensProvider('xml', {
+//       provideCodeLenses: (doc, ct) => {
+//           console.log('init objectlens provider'); 
+//           var codeLenses = [];
+          
+//           codeLenses.push( {
+//               range: doc.lineAt(0).range,
+//               command: { title: 'Foo', command: 'extension.sayHello'},
+//               isResolved: true
+//           });
+
+//           return codeLenses;
+//       },
+
+// // 1. historization
+
+// // 2. default columns
+// // 2a. create new 
+
+// // 3. excel multi print
+
+// // 4. weeks on stock
+
+//       resolveCodeLens: (cl, tkn) => {
+
+//           return cl;
+//       }
+
+//   });
+
 }
 
 exports.activate = activate
