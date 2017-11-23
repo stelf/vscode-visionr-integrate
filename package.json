@@ -6,7 +6,7 @@
 		"visionr"
 	],
 	"description": "VisionR devops integration",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"publisher": "plan-vision",
 	"engines": {
 		"vscode": "^1.5.0"
@@ -16,30 +16,62 @@
 	],
 	"activationEvents": [
 		"onCommand:visionr.uploadProperty",
+		"onCommand:visionr.deleteProperty",
 		"onCommand:visionr.uploadObject",
-		"onCommand:visionr.reloadCore"
+		"onCommand:visionr.reloadCore",
+		"onCommand:visionr.selectEndpoint"
 	],
 	"main": "./extension",
 	"contributes": {
-		"keybindings": [{
-			"command": "visionr.uploadObject",
-			"key": "ctrl+alt+v O",
-			"mac": "cmd+alt+v O"
-		}, {
-			"command": "visionr.uploadProperty",
-			"key": "ctrl+alt+v p",
-			"mac": "cmd+alt+v p"
-		}],
-		"commands": [{
-			"command": "visionr.uploadObject",
-			"title": "VisionR: Upload Object/ODEF (+reload core)"
-		}, {
-			"command": "visionr.reloadCore",
-			"title": "VisionR: Reload CORE"
-		}, {
-			"command": "visionr.uploadProperty",
-			"title": "VisionR: Upload Property"
-		}],
+		"keybindings": [
+			{
+				"command": "visionr.uploadObject",
+				"key": "ctrl+alt+v O",
+				"mac": "cmd+alt+v O"
+			},
+			{
+				"command": "visionr.uploadProperty",
+				"key": "ctrl+alt+v p",
+				"mac": "cmd+alt+v p"
+			},
+			{
+				"command": "visionr.deleteProperty",
+				"key": "ctrl+alt+v d",
+				"mac": "cmd+alt+v d"
+			},
+			{
+				"command": "visionr.selectEndpoint",
+				"key": "ctrl+alt+v s",
+				"mac": "cmd+alt+v s"
+			},
+			{
+				"command": "visionr.reloadCore",
+				"key": "ctrl+alt+v r",
+				"mac": "cmd+alt+v r"
+			}
+		],
+		"commands": [
+			{
+				"command": "visionr.uploadObject",
+				"title": "VisionR: Upload Object/ODEF (+reload core)"
+			},
+			{
+				"command": "visionr.reloadCore",
+				"title": "VisionR: Reload CORE"
+			},
+			{
+				"command": "visionr.uploadProperty",
+				"title": "VisionR: Upload Property"
+			},
+			{
+				"command": "visionr.deleteProperty",
+				"title": "VisionR: Delete Property"
+			},
+			{
+				"command": "visionr.selectEndpoint",
+				"title": "VisionR: Select Endpoint"
+			}
+		],
 		"configuration": {
 			"type": "object",
 			"title": "VisionR config",
@@ -50,13 +82,15 @@
 				},
 				"visionr.endpoints": {
 					"type": "array",
-					"default": [{
-						"name": "local 8182",
-						"endpoint": "localhost:8182",
-						"username": "visionr",
-						"password": "change-with-real-one",
-						"servkey": "UPDATE"
-					}],
+					"default": [
+						{
+							"name": "local 8182",
+							"endpoint": "localhost:8182",
+							"username": "visionr",
+							"password": "change-with-real-one",
+							"servkey": "UPDATE"
+						}
+					],
 					"description": "Endpoints Config. Note - do not include HTTP in address"
 				}
 			}
@@ -66,11 +100,11 @@
 		"postinstall": "node ./node_modules/vscode/bin/install"
 	},
 	"devDependencies": {
-		"typescript": "^2.0.3",
-		"vscode": "^1.0.0",
+		"@types/mocha": "^2.2.44",
+		"@types/node": "^6.0.92",
+		"eslint": "^3.19.0",
 		"mocha": "^2.3.3",
-		"eslint": "^3.6.0",
-		"@types/node": "^6.0.40",
-		"@types/mocha": "^2.2.32"
+		"typescript": "^2.6.1",
+		"vscode": "^1.1.7"
 	}
 }
