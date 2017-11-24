@@ -14,13 +14,12 @@ function waitExec(vsh, command) {
     let cmdsent = false
 
     vsh.stdout.on('data', vshdata => {
-      console.log(`waitExec: ${vshdata}`)
+      // console.debug(`waitExec: ${vshdata}`)
       let vshline = vshdata.toString()
       let e;
 
       if (vshline.indexOf('Server stopped') + 1) {
         vscode.window.showErrorMessage(vshline)
-
         console.error(`waitExec: ${vshline}`)
         return rej(vshline)
       }
@@ -47,6 +46,10 @@ function waitExec(vsh, command) {
 
       if (e = vshline.indexOf('XML import error on line') >= 0) {
         return rej('error importing xml snippet...');
+      }
+
+      if (e = vshline.indexOf('error:Error on transformation') >= 0) {
+        return rej('error importing xml snippet...');        
       }
 
       if (e = vshline.indexOf('On validating import xml file') >= 0) {
@@ -125,7 +128,10 @@ function sendSCHEMA(sxml) {
           vscode.window.showInformationMessage('XML SCHEMA update sent.', ep.servkey)
           res('VR XML Schema sent!')
         })
-        .catch(vscode.window.showErrorMessage.bind(this));
+        .catch( err => { 
+          vscode.window.showErrorMessage(err)
+          console.warn(sxml)
+        });
     })
   })
 
@@ -152,10 +158,41 @@ function sendReloadCore() {
   });
 }
 
-function uploadProperty() {
-  let r, t
+function determineModule(tags) { 
+  "use strict"
+
+  console.log(`determineModule: searching for module prologue`);
+  
   const editor = vscode.window.activeTextEditor
-  let lcnt = vscode.window.activeTextEditor.document.lineCount
+  const lcnt = vscode.window.activeTextEditor.document.lineCount
+
+  let i = 0
+
+  do {
+    let buf = editor.document.lineAt(i).text
+    let test
+    if (test = buf.match(/<(\w+) module_alias.*>/)) {
+      tags.unshift({
+        text: buf,
+        line: i
+      });
+
+      console.log(`determineModule: [${test[1]}] found at line [${i}]`);      
+      return test[1]
+    }
+
+    i++;
+  } while (i < lcnt)
+}
+
+function uploadProperty() {
+  "use strict"
+  let r, t
+
+  const editor = vscode.window.activeTextEditor
+  const curdoc = vscode.window.activeTextEditor.document
+
+  let lcnt = curdoc.lineCount
   let tags = []
 
   r = t = editor.selection.active.line
@@ -165,13 +202,19 @@ function uploadProperty() {
     'category',
     'data_source',
     'data_type',
+    'display_type',
     'index_code',
+    'is_constant',
+    'is_dynamic',
+    'is_hidden',
     'is_inmaintbl',
     'is_multiple',
     'is_obligatory',
+    'is_readonly',
+    'rel_display_string_order',
+    'related_objectdef',
     'relation_filter',
     'relation_parent',
-    'related_objectdef',
     'sort_id',
   ];
 
@@ -183,20 +226,28 @@ function uploadProperty() {
     let buf = editor.document.lineAt(t).text;
     let tag;
 
-    if (tag = buf.match(/<(\/[\w_]+)>/)) level = false;
-        
-    if (tag = buf.match(/<([\w_]+)>.*<\/\1>/)) {
-      if (cprop.indexOf(tag[1]) >= 0) {
+    // closing tag - UNSET level 
+    if (tag = buf.match(/<^\s*(\/[\w_]+)>/)) {
+        level = false;        
+    }
+
+    // single opening tag 
+    if ((tag = buf.match(/^\s*<([a-z_]+)>/)) && cprop.indexOf(tag[1]) >= 0) {
         level = true;
-      }
-    } else if (tag = buf.match(/^\s*<([\w_]+).*?(col=".*?")*>\s*$/)) {
+    }   // opening and closing tag on a single line
+    else if ((tag = buf.match(/<([a-z_]+)>.*<\/\1>/)) && cprop.indexOf(tag[1]) >= 0) {
+        level = true; 
+    } // opening tag - generic for properties    
+    else if (tag = buf.match(/^\s*<([a-z_]+)*?\s*((col|is_keep_settings)="\w+")*>\s*$/)) {
       if (level) {
         propname = tag[1];
-        console.log(`uploadProperty: found <${propname}> property start, at line ${t}`);
+        console.log(`uploadProperty: found <${propname}> property start, at line ${t}`);  
       }
     } else {
       level = false;
     }
+
+    step:
 
     tags.unshift({
       text: buf,
@@ -214,7 +265,7 @@ function uploadProperty() {
     let tag, buf;
     buf = editor.document.lineAt(o).text
 
-    if (tag = buf.match(/\<([\w_]+)\s*\b(tbl|copy_from)+.*\>/)) {
+    if (tag = buf.match(/\<([\w_]+)\s*\b(tbl|copy_from|parent_objectdef)+.*\>/)) {
       tags.unshift({
         text: buf,
         line: o
@@ -249,38 +300,49 @@ function uploadProperty() {
   if (depth) return;
 
   // 4) Prologue
-  let i = 0;
-  let module;
-  do {
-    let buf = editor.document.lineAt(i).text
-    let test
-    if (test = buf.match(/<(\w+) module_alias.*>/)) {
-      module = test[1];
-      tags.unshift({
-        text: buf,
-        line: i
-      });
-    }
-
-    i++;
-  } while (!module);
+  const mod = determineModule(tags);
 
   // 5) Epilogue
 
   tags.push(
     { text: `</${objectdef}>` },
-    { text: `</${module}>` }
+    { text: `</${mod}>` }
   );
 
-  editor.selection.start.line = t;
-  editor.selection.start.character = 1;
-  editor.selection.end.line = r + 1;
-  editor.selection.end.character = 1;
+  editor.selection = new vscode.Selection(
+    curdoc.positionAt(t), curdoc.positionAt(r)
+  )
 
-  let payload = "<objectdefs>" + tags.map(e => e.text).join('\n') + "</objectdefs>";
-
+  const payload = "<objectdefs>" + tags.map(e => e.text).join('\n') + "</objectdefs>";
+  const updpath = `${[mod, objectdef, propname].join('.')}`;
+  
   sendSCHEMA(payload).then(sendReloadCore).then(
-    vscode.window.showInformationMessage.bind(this, 'Upload to VISIONR Server complete!'))
+    vscode.window.showInformationMessage.bind(this, `definition for ${updpath} updated at ${curep.endpoint}`))
+}
+
+function deleteProperty() {
+  vscode.window.showInputBox({ prompt: 'Enter path to property (eg. db.module.odef.prop)' })
+  .then(val => {
+    var res = val.match(/db\.(\w+)\.(\w+)\.(\w+)/)
+    if (!res) return;
+
+    let tags = []
+    let module = determineModule(tags)
+    
+    tags.push({text: `<${res[3]} mode="delete" />` })
+
+    tags.push(
+      { text: `</${objectdef}>` },
+      { text: `</${module}>` }
+    );
+
+    let payload = "<objectdefs>" + tags.map(e => e.text).join('\n') + "</objectdefs>";    
+    vscode.window.showInformationMessage('deleting ' + val)
+
+    sendSCHEMA(payload).then(sendReloadCore).then(
+      vscode.window.showInformationMessage.bind(this, `${module}.${objectdef}.${propname} deleted`))
+  
+  });
 }
 
 function uploadObject() {
@@ -306,6 +368,7 @@ function uploadObject() {
       buf = editor.document.lineAt(l).text
       if (buf.indexOf('<object') >= 0 && buf.indexOf('/>') == -1 && buf.indexOf('/object>') == -1) {
         lfnd = true
+        buf.match(/code="([_\w]+)"/);
       } else if (l > 0) l--
     }
 
@@ -316,17 +379,24 @@ function uploadObject() {
     }
   } while (l >= 0 && r < lcnt && !(lfnd && rfnd))
 
-  if (lfnd && rfnd) {
-    vscode.window.setStatusBarMessage(`found ${r - l} lines long object between rows ${r} and ${l}`)
+  if (lfnd && rfnd) { stChangedRevision: 1
+    vscode.window.activeTextEditor.selections[0] = new vscode.Selection(
+      editor.document.positionAt(l), 
+      editor.document.positionAt(r)
+    )
+  
+    vscode.window.setStatusBarMessage(`found ${r - l} lines long object between rows ${l} and ${r}`)
     sendXMLOBJ(res.join('\n'))
       .then(sendReloadCore)
       .then(vscode.window.showInformationMessage.bind(this, 'Upload to VISIONR Server complete!'))
       .catch(vscode.window.showErrorMessage.bind(this))
   } else {
-    console.log('could not figure XML object within current VR editor')
+    let msg = 'could not figure XML object within current VR editor';
+    vscode.window.showErrorMessage(msg)
+    console.log(msg)
   }
 }
-
+ 
 function activate(context) {
   console.log('VISIONR integration started!')
 
@@ -334,6 +404,7 @@ function activate(context) {
     'visionr.uploadObject': uploadObject,
     'visionr.reloadCore': sendReloadCore,
     'visionr.uploadProperty': uploadProperty,
+    'visionr.deleteProperty': deleteProperty,
     'visionr.selectEndpoint': selectEndpoint
   }
 
